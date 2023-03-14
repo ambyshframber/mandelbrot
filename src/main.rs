@@ -7,12 +7,17 @@ use std::time::Instant;
 
 fn main() {
     let m = MandOpts::parse();
+    if m.antialiasing == 0 {
+        eprintln!("antialiasing cannot be 0")
+    }
+    else {
+        let start = Instant::now();
+        let i = make_mandelbrot(&m);
+        let dur = Instant::now().duration_since(start);
+        println!("took {} ms", dur.as_millis());
+        i.save(&m.output).expect("shit fuck ass");
+    }
 
-    let start = Instant::now();
-    let i = make_mandelbrot(&m);
-    let dur = Instant::now().duration_since(start);
-    println!("took {} ms", dur.as_millis());
-    i.save(&m.output).expect("shit fuck ass");
 }
 
 /// the mandelbrot
@@ -47,8 +52,8 @@ struct MandOpts {
     algorithm: Algo,
 
     /// enable antialiasing
-    #[arg(short, default_value_t = false)]
-    antialiasing: bool
+    #[arg(short, default_value_t = 1)]
+    antialiasing: usize
 }
 
 fn make_mandelbrot(m: &MandOpts) -> RgbImage {
@@ -71,22 +76,24 @@ fn make_mandelbrot(m: &MandOpts) -> RgbImage {
         let y = m.height - y;
         let incr = px_to_incr(m.scale, m.width);
 
-        if m.antialiasing {
-            let points = [
-                point_to_complex(x, y, m.x1, m.y1, incr),
-                point_to_complex((x * 2) + 1, y * 2, m.x1, m.y1, incr / 2.0),
-                point_to_complex(x * 2, (y * 2) + 2, m.x1, m.y1, incr / 2.0),
-                point_to_complex((x * 2) + 1, (y * 2) + 2, m.x1, m.y1, incr / 2.0),
-            ].map(|c| complex_to_colour(algo, c, m.cycles).0);
+        if m.antialiasing != 1 {
+            let aa = m.antialiasing;
+            let x = x * aa as u32;
+            let y = y * aa as u32;
+            let incr = incr / aa as f32;
+            let points: Vec<Rgb<u8>> = (0..aa).map(|i| {
+                (0..aa).map(move |j| {
+                    point_to_complex(x + i as u32, y + j as u32, m.x1, m.y1, incr)
+                })
+            }).flatten()
+            .map(|c| complex_to_colour(algo, c, m.cycles))
+            .collect();
             Rgb(average_colour(&points))
         }
         else {
             let c = point_to_complex(x, y, m.x1, m.y1, incr);
-
             complex_to_colour(algo, c, m.cycles)
-        }
-
-        
+        }   
     })
 }
 
@@ -105,17 +112,14 @@ where F: Fn(Complex, usize) -> MandelbrotOutcome {
     }
 }
 
-fn average_colour(inputs: &[[u8; 3]]) -> [u8; 3] {
+fn average_colour(inputs: &[Rgb<u8>]) -> [u8; 3] {
     let mut acc: [u16; 3] = [0; 3];
     for i in inputs {
-        acc.iter_mut().zip(i.iter()).for_each(|(acc, src)| *acc += *src as u16)
+        acc.iter_mut().zip(i.0.iter()).for_each(|(acc, src)| *acc += *src as u16)
     }
     acc.map(|c| (c / inputs.len() as u16) as u8)
 }
 
-/// x and y are pixels (float here for AA reasons)
-/// x1 and y1 are the bottom left corner of the desired view
-/// incr is calculated from px_to_incr
 fn point_to_complex(x: u32, y: u32, x1: f32, y1: f32, incr: f32) -> Complex {
     let real = (x as f32 * incr) + x1;
     let imag = (y as f32 * incr) + y1;
