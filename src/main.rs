@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use clap::Parser;
+use rayon::prelude::*;
 
 use image::{RgbImage, Rgb};
 use std::time::Instant;
@@ -57,16 +58,8 @@ struct MandOpts {
 }
 
 fn make_mandelbrot(m: &MandOpts) -> RgbImage {
-    RgbImage::from_fn(m.width, m.height, |x, y| {
-        /*
-        if x % (m.width / 16) == 0 {
-            return Rgb([0, u8::MAX, 0])
-        }
-        if y % (m.height / 8) == 0 {
-            return Rgb([0, u8::MAX, 0])
-        }
-        */
-        
+    let mut i = RgbImage::new(m.width, m.height);
+    i.enumerate_pixels_mut().par_bridge().for_each(|(x, y, p)| {        
         use Algo::*;
         let algo = match m.algorithm {
             Pcheck16 => mandelbrot_16_pcheck,
@@ -76,7 +69,7 @@ fn make_mandelbrot(m: &MandOpts) -> RgbImage {
         let y = m.height - y;
         let incr = px_to_incr(m.scale, m.width);
 
-        if m.antialiasing != 1 {
+        let px = if m.antialiasing != 1 {
             let aa = m.antialiasing;
             let x = x * aa as u32;
             let y = y * aa as u32;
@@ -93,8 +86,11 @@ fn make_mandelbrot(m: &MandOpts) -> RgbImage {
         else {
             let c = point_to_complex(x, y, m.x1, m.y1, incr);
             complex_to_colour(algo, c, m.cycles)
-        }   
-    })
+        };
+
+        *p = px
+    });
+    i
 }
 
 fn complex_to_colour<F>(f: F, c: Complex, cycles: usize) -> Rgb<u8>
