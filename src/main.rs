@@ -173,8 +173,7 @@ fn mandelbrot_16_pcheck(c: Complex, limit: usize) -> MandelbrotOutcome {
         if z.fuzzy_eq(old) {
             return Cycle(i)
         }
-        let mag = z.magnitude();
-        if mag > 2.0 {
+        if z.magnitude_squared() > 4.0 {
             return MagEscape(i)
         }
     }
@@ -186,8 +185,7 @@ fn mandelbrot_no_pcheck(c: Complex, limit: usize) -> MandelbrotOutcome {
 
     for i in 0..limit {
         z = z.square() + c;
-        let mag = z.magnitude();
-        if mag > 2.0 {
+        if z.magnitude_squared() > 4.0 {
             return MagEscape(i)
         }
     }
@@ -207,6 +205,9 @@ impl Complex {
     }
     fn magnitude(self) -> f32 {
         (self.real.powi(2) + self.imag.powi(2)).sqrt()
+    }
+    fn magnitude_squared(self) -> f32 {
+        self.real.powi(2) + self.imag.powi(2)
     }
 
     fn fuzzy_eq(self, other: Self) -> bool {
